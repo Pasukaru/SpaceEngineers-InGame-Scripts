@@ -14,7 +14,8 @@ public class Class1
     // For an easy use, you should build 3 Button Panels. One next to each door (outside) plus one in the center 
     // of the Pressure Chamber. 
 
-    //***** Configuration *****\\ 
+    //***** Configuration *****\\
+
     //Name of the Inner Door 
     const string DOOR_INSIDE = "Door (Pressure Chamber Inside)";
 
@@ -24,13 +25,29 @@ public class Class1
     //Name of the Vent 
     const string VENT = "Vent (Pressure Chamber)";
 
-    //Name of the Timer block (Set the first action of the Timer Block to this Programmable Block->Run) 
-    const string TIMER_BLOCK = "TBTEST";
+    //Name of the Timer block
+    const string TIMER_BLOCK = "Timer Block (Pressure Chamber)";
 
-    //Set this to false, if you don't want the PB to power off doors (prevents manual open/close and accidental loss of air) 
+    //Set this to false, if you don't want the PB to power off doors.
+    //This prevents manual open/close and accidental loss of air.
     const bool DISABLE_DOORS = true;
 
-    //***** DO NOT MODIFY BELOW THIS LINE *****\\       
+    //Dont wait longer than 3 seconds for depressurization.
+    //Low values will result in a loss of air if the vent is too slow or your Oxygen Tanks are full.
+    const int MAX_WAIT_DEPRESSURIZING = 3;
+
+    //Don't wait longer than 3 seconds for pressurization.
+    //Low values probably won't harm you, as you will receive oxygen 
+    //from the main room if the door opens.
+    //This is mostly useful if your tanks are empty.
+    //Set to 0 if you want the inner door to open immediately.
+    const int MAX_WAIT_PRESSURIZING = 3;
+
+    //The number of frames until the door is fully closed.
+    //You probably don't need to change this.
+    const int DOOR_ANIMATION_DURATION = 70;
+
+    //***** DO NOT MODIFY BELOW THIS LINE *****\\
 
     const string OPEN_DOOR = "Open_On";
     const string CLOSE_DOOR = "Open_Off";
@@ -52,22 +69,6 @@ public class Class1
         timer++;
         var tb = GridTerminalSystem.GetBlockWithName(TIMER_BLOCK) as IMyTimerBlock;
         tb.GetActionWithName("TriggerNow").Apply(tb);
-    }
-
-    void log(string message)
-    {
-        /* 
-        var groups = GridTerminalSystem.BlockGroups; 
-        List<IMyTerminalBlock> group = null; 
-        for (int i = 0; i < groups.Count; i++) { 
-            if (groups[i].Name == "Antenna") { 
-                group = groups[i].Blocks; 
-                break; 
-            } 
-        } 
- 
-        group[0].SetCustomName(action+"|"+state+"|"+timer+"|"+message); 
-        */
     }
 
     void enableDoor(IMyDoor door)
@@ -110,13 +111,11 @@ public class Class1
             action = "close_doors";
             timer = 0;
             nextTick();
-            log("Doors enabled");
             return;
         }
 
         if (action.Equals("close_doors"))
         {
-            log("Closing doors");
             closeDoor(door_outside);
             closeDoor(door_inside);
             state = "close_doors";
@@ -133,11 +132,10 @@ public class Class1
 
         if (action.Equals("disable_doors"))
         {
-            if (timer >= 90)
+            if (timer >= DOOR_ANIMATION_DURATION)
             {
                 door_inside.GetActionWithName(DISABLE).Apply(door_inside);
                 door_outside.GetActionWithName(DISABLE).Apply(door_outside);
-                log("Doors disabled");
                 timer = 0;
                 action = null;
                 return;
@@ -150,8 +148,7 @@ public class Class1
         {
             if (state.Equals("close_doors"))
             {
-                log("close_doors: " + timer);
-                if (timer >= 90)
+                if (timer >= DOOR_ANIMATION_DURATION)
                 {
                     vent.GetActionWithName(ENABLE).Apply(vent);
                     vent.GetActionWithName(DE_PRESSURIZE).Apply(vent);
@@ -162,8 +159,7 @@ public class Class1
             }
             else if (state.Equals("depressurizing"))
             {
-                log("depressurizing: " + vent.GetOxygenLevel());
-                if (vent.GetOxygenLevel() < 0.00001 || timer > 1000)
+                if (vent.GetOxygenLevel() < 0.00001 || timer >= MAX_WAIT_DEPRESSURIZING * 60)
                 {
                     vent.GetActionWithName(DISABLE).Apply(vent);
                     openDoor(door_outside);
@@ -177,8 +173,7 @@ public class Class1
         {
             if (state.Equals("close_doors"))
             {
-                log("close_doors: " + timer);
-                if (timer >= 90)
+                if (timer >= DOOR_ANIMATION_DURATION)
                 {
                     vent.GetActionWithName(ENABLE).Apply(vent);
                     vent.GetActionWithName(PRESSURIZE).Apply(vent);
@@ -189,8 +184,7 @@ public class Class1
             }
             else if (state.Equals("pressurizing"))
             {
-                log("pressurizing: " + vent.GetOxygenLevel());
-                if (vent.GetOxygenLevel() > 0.99999 || timer > 1000)
+                if (vent.GetOxygenLevel() > 0.99999 || timer > MAX_WAIT_PRESSURIZING * 60)
                 {
                     vent.GetActionWithName(DISABLE).Apply(vent);
                     openDoor(door_inside);
