@@ -23,25 +23,28 @@ public class Class1
     const string DOOR_OUTSIDE = "Door (Pressure Chamber Outside)";
 
     //Name of the Vent 
-    const string VENT = "Vent (Pressure Chamber)";
+    const string VENT = "Air Vent (Pressure Chamber)";
 
     //Name of the Timer block
     const string TIMER_BLOCK = "Timer Block (Pressure Chamber)";
+
+    //Name of the LCD Panel the PB will print its messages onto. (OPTIONAL)
+    const string LOG_PANEL = "LCD Log (Pressure Chamber)";
 
     //Set this to false, if you don't want the PB to power off doors.
     //This prevents manual open/close and accidental loss of air.
     const bool DISABLE_DOORS = true;
 
-    //Dont wait longer than 3 seconds for depressurization.
+    //Don't wait longer than 3 seconds (180 ticks) for depressurization.
     //Low values will result in a loss of air if the vent is too slow or your Oxygen Tanks are full.
-    const int MAX_WAIT_DEPRESSURIZING = 3;
+    const int MAX_WAIT_DEPRESSURIZING = 180;
 
-    //Don't wait longer than 3 seconds for pressurization.
+    //Don't wait longer than 3 seconds (180 ticks) for pressurization.
     //Low values probably won't harm you, as you will receive oxygen 
     //from the main room if the door opens.
     //This is mostly useful if your tanks are empty.
     //Set to 0 if you want the inner door to open immediately.
-    const int MAX_WAIT_PRESSURIZING = 3;
+    const int MAX_WAIT_PRESSURIZING = 180;
 
     //The number of frames until the door is fully closed.
     //You probably don't need to change this.
@@ -51,153 +54,173 @@ public class Class1
 
     const string OPEN_DOOR = "Open_On";
     const string CLOSE_DOOR = "Open_Off";
-
     const string ENABLE = "OnOff_On";
     const string DISABLE = "OnOff_Off";
-
     const string DE_PRESSURIZE = "Depressurize_On";
     const string PRESSURIZE = "Depressurize_Off";
 
-    const string RUN = "Run";
+    public Func<bool> wait = null;
+    public List<Func<Func<bool>>> actions = new List<Func<Func<bool>>>();
+    public int currentAction = 0;
 
-    string action = null;
-    string state = null;
-    int timer = 0;
+    public IMyTimerBlock timerBlock = null;
+    public IMyTextPanel logPanel = null;
 
-    void nextTick()
+    public void nextTick()
     {
-        timer++;
         var tb = GridTerminalSystem.GetBlockWithName(TIMER_BLOCK) as IMyTimerBlock;
-        tb.GetActionWithName("TriggerNow").Apply(tb);
+        timerBlock.ApplyAction("TriggerNow");
     }
 
-    void enableDoor(IMyDoor door)
+    public void c_log(string message)
     {
-        door.GetActionWithName(ENABLE).Apply(door);
+        if (logPanel == null) { return; }
+        if (message == null)
+        {
+            logPanel.WritePublicText("");
+        }
+        else
+        {
+            logPanel.WritePublicText(message + "\n", true);
+        }
+        logPanel.ShowPublicTextOnScreen();
     }
 
-    void disableDoor(IMyDoor door)
+    public Func<bool> waitForTicks(long ticks)
     {
-        door.GetActionWithName(DISABLE).Apply(door);
+        long count = 0;
+        return () =>
+        {
+            return count++ >= ticks;
+        };
     }
 
-    void openDoor(IMyDoor door)
+    public Func<bool> waitForPressure(IMyAirVent vent, bool pressurizing)
     {
-        enableDoor(door);
-        door.GetActionWithName(OPEN_DOOR).Apply(door);
+        Func<bool> maxWait = waitForTicks(pressurizing ? MAX_WAIT_PRESSURIZING : MAX_WAIT_DEPRESSURIZING);
+        return () =>
+        {
+            double ox = vent.GetOxygenLevel();
+            if (maxWait()) {
+                c_log((pressurizing ? "" : "de")+"pressurization_wait_timout ("+(ox*100)+"% oxygen lost)");
+                return true; 
+            }
+            if (pressurizing)
+            {
+                if (ox >= 0.95)
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                if (ox <= 0.0001)
+                {
+                    return true;
+                }
+            }
+            return false;
+        };
     }
 
-    void closeDoor(IMyDoor door)
+    public class BlockAction
     {
-        enableDoor(door);
-        door.GetActionWithName(CLOSE_DOOR).Apply(door);
+        protected readonly string action;
+        protected readonly Func<bool> wait;
+        protected readonly IMyTerminalBlock[] blocks;
+        public BlockAction(string action, Func<bool> wait, params IMyTerminalBlock[] blocks)
+        {
+            this.action = action;
+            this.wait = wait;
+            this.blocks = blocks;
+        }
+        public Func<bool> execute()
+        {
+            foreach (IMyTerminalBlock block in blocks)
+            {
+                block.ApplyAction(action);
+            }
+            return wait;
+        }
+    }
+
+    public Func<Func<bool>> logWrapper(string message, Func<Func<bool>> action)
+    {
+        return () =>
+        {
+            c_log("Executing: " + message);
+            return action();
+        };
+    }
+
+    public void addDoorAction(string msg, Func<Func<bool>> action)
+    {
+        if (DISABLE_DOORS)
+        {
+            actions.Add(logWrapper(msg, action));
+        }
     }
 
     void Main()
     {
-        var door_outside = GridTerminalSystem.GetBlockWithName(DOOR_OUTSIDE) as IMyDoor;
-        var door_inside = GridTerminalSystem.GetBlockWithName(DOOR_INSIDE) as IMyDoor;
-        var vent = GridTerminalSystem.GetBlockWithName(VENT) as IMyAirVent;
-
-        if (action == null)
+        if (wait != null)
         {
-            action = "enable_doors";
+            if (!wait())
+            {
+                nextTick();
+                return;
+            }
+            wait = null;
         }
 
-        if (action.Equals("enable_doors"))
+        if (actions.Count == 0)
         {
-            enableDoor(door_inside);
-            enableDoor(door_outside);
-            action = "close_doors";
-            timer = 0;
-            nextTick();
-            return;
-        }
+            var logPanelBlock = GridTerminalSystem.GetBlockWithName(LOG_PANEL);
+            logPanel = (logPanelBlock != null && logPanelBlock is IMyTextPanel)
+                ? (IMyTextPanel)logPanelBlock
+                : null;
 
-        if (action.Equals("close_doors"))
-        {
-            closeDoor(door_outside);
-            closeDoor(door_inside);
-            state = "close_doors";
-            timer = 0;
+            timerBlock = GridTerminalSystem.GetBlockWithName(TIMER_BLOCK) as IMyTimerBlock;
+            var door_outside = GridTerminalSystem.GetBlockWithName(DOOR_OUTSIDE) as IMyDoor;
+            var door_inside = GridTerminalSystem.GetBlockWithName(DOOR_INSIDE) as IMyDoor;
+            var vent = GridTerminalSystem.GetBlockWithName(VENT) as IMyAirVent;
+            c_log(null);
+
+            addDoorAction("enable_doors", new BlockAction(ENABLE, waitForTicks(0), door_outside, door_inside).execute);
+            actions.Add(logWrapper("close_doors", new BlockAction(CLOSE_DOOR, waitForTicks(DOOR_ANIMATION_DURATION), door_outside, door_inside).execute));
+            addDoorAction("disable_doors", new BlockAction(DISABLE, null, door_outside, door_inside).execute);
+            actions.Add(logWrapper("enable_vent", new BlockAction(ENABLE, waitForTicks(0), vent).execute));
             if (door_outside.Open)
             {
-                action = "out_to_in";
+                actions.Add(logWrapper("pressurize", new BlockAction(PRESSURIZE, waitForPressure(vent, true), vent).execute));
+                addDoorAction("enable_inner_door", new BlockAction(ENABLE, waitForTicks(0), door_inside).execute);
+                actions.Add(logWrapper("disable_vent", new BlockAction(DISABLE, waitForTicks(0), vent).execute));
+                actions.Add(logWrapper("open_inner_door", new BlockAction(OPEN_DOOR, waitForTicks(DOOR_ANIMATION_DURATION), door_inside).execute));
+                addDoorAction("disable_inner_door", new BlockAction(DISABLE, null, door_inside).execute);
             }
             else
             {
-                action = "in_to_out";
+                actions.Add(logWrapper("depressurize", new BlockAction(DE_PRESSURIZE, waitForPressure(vent, false), vent).execute));
+                addDoorAction("enable_outer_door", new BlockAction(ENABLE, waitForTicks(0), door_outside).execute);
+                actions.Add(logWrapper("disable_vent", new BlockAction(DISABLE, waitForTicks(0), vent).execute));
+                actions.Add(logWrapper("open_outer_door", new BlockAction(OPEN_DOOR, waitForTicks(DOOR_ANIMATION_DURATION), door_outside).execute));
+                addDoorAction("disable_outer_door", new BlockAction(DISABLE, null, door_outside).execute);
             }
         }
 
-        if (action.Equals("disable_doors"))
+        while (wait == null && currentAction < actions.Count)
         {
-            if (timer >= DOOR_ANIMATION_DURATION)
-            {
-                door_inside.GetActionWithName(DISABLE).Apply(door_inside);
-                door_outside.GetActionWithName(DISABLE).Apply(door_outside);
-                timer = 0;
-                action = null;
-                return;
-            }
-            nextTick();
-            return;
+            wait = actions[currentAction++]();
         }
 
-        if (action.Equals("in_to_out"))
-        {
-            if (state.Equals("close_doors"))
-            {
-                if (timer >= DOOR_ANIMATION_DURATION)
-                {
-                    vent.GetActionWithName(ENABLE).Apply(vent);
-                    vent.GetActionWithName(DE_PRESSURIZE).Apply(vent);
-                    enableDoor(door_outside);
-                    state = "depressurizing";
-                    timer = 0;
-                }
-            }
-            else if (state.Equals("depressurizing"))
-            {
-                if (vent.GetOxygenLevel() < 0.00001 || timer >= MAX_WAIT_DEPRESSURIZING * 60)
-                {
-                    vent.GetActionWithName(DISABLE).Apply(vent);
-                    openDoor(door_outside);
-                    action = DISABLE_DOORS ? "disable_doors" : null;
-                    timer = 0;
-                    state = null;
-                }
-            }
-        }
-        else if (action.Equals("out_to_in"))
-        {
-            if (state.Equals("close_doors"))
-            {
-                if (timer >= DOOR_ANIMATION_DURATION)
-                {
-                    vent.GetActionWithName(ENABLE).Apply(vent);
-                    vent.GetActionWithName(PRESSURIZE).Apply(vent);
-                    enableDoor(door_inside);
-                    state = "pressurizing";
-                    timer = 0;
-                }
-            }
-            else if (state.Equals("pressurizing"))
-            {
-                if (vent.GetOxygenLevel() > 0.99999 || timer > MAX_WAIT_PRESSURIZING * 60)
-                {
-                    vent.GetActionWithName(DISABLE).Apply(vent);
-                    openDoor(door_inside);
-                    action = DISABLE_DOORS ? "disable_doors" : null;
-                    timer = 0;
-                    state = null;
-                }
-            }
-        }
-
-        if (action != null || state != null)
+        if (currentAction < actions.Count)
         {
             nextTick();
+        }
+        else
+        {
+            currentAction = 0;
+            actions.Clear();
         }
     }
     #endregion
