@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 using Sandbox.ModAPI.Ingame;
@@ -22,6 +22,9 @@ public class OxygenLevelDisplay
 
     //Name of the LCD/Text Panel that will display the text  
     const string LCD_PANEL = "LCD (Oxygen Status)";
+	
+    //Set this to false if you want to ignore docked ships
+    const bool IGNORE_OTHER_GRIDS = true;
 
     //Message format 
     const string FORMAT = "Oxygen Level\nAvg: {0:0.00000}%\nTanks: {1:00}\nTime Left: {2:00}:{3:00}:{4:00}";
@@ -51,6 +54,11 @@ public class OxygenLevelDisplay
         double oxygen = 0;
         var tanks = new List<IMyTerminalBlock>();
         GridTerminalSystem.GetBlocksOfType<IMyGasTank>(tanks);
+		if (IGNORE_OTHER_GRIDS)
+		{
+		    tanks = tanks.Where(tank => tank.CubeGrid == Me.CubeGrid).ToList();
+		}
+		
         if (tanks.Count > 0)
         {
             for (int i = 0; i < tanks.Count; i++)
