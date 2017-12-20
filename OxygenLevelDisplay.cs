@@ -32,36 +32,37 @@ public class OxygenLevelDisplay
 
     //***** DO NOT EDIT BELOW THIS LINE *****//  
 
-    void Main() 
-    { 
+    void Main()
+    {
 
-        var panel_block = GridTerminalSystem.GetBlockWithName(LCD_PANEL) as IMyTerminalBlock; 
+        var panel_block = GridTerminalSystem.GetBlockWithName(LCD_PANEL) as IMyTerminalBlock;
 
-        if (panel_block == null || !(panel_block is IMyTextPanel)) 
-        { 
-            if (!IGNORE_ERRORS) 
-            { 
-                throw new Exception("Failed to find panel with name: " + LCD_PANEL); 
-            } 
+        if (panel_block == null || !(panel_block is IMyTextPanel))
+        {
+            if (!IGNORE_ERRORS)
+            {
+                throw new Exception("Failed to find panel with name: " + LCD_PANEL);
+            }
             return;
-        } 
+        }
 
-        IMyTextPanel panel = (IMyTextPanel)panel_block; 
+        IMyTextPanel panel = (IMyTextPanel)panel_block;
 
-        double oxygen = 0; 
-        var tanks = new List<IMyTerminalBlock>(); 
-        GridTerminalSystem.GetBlocksOfType<IMyGasTank>(tanks); 
-        if (tanks.Count > 0) 
-        { 
-            for (int i = 0; i < tanks.Count; i++) 
-            { 
-                oxygen += (tanks[i] as IMyGasTank).FilledRatio; 
-            } 
-            oxygen /= tanks.Count / 100f; 
-        } 
+        double oxygen = 0;
+        var tanks = new List<IMyTerminalBlock>();
+        GridTerminalSystem.GetBlocksOfType<IMyGasTank>(tanks);
+        if (tanks.Count > 0)
+        {
+            for (int i = 0; i < tanks.Count; i++)
+            {
+                oxygen += (tanks[i] as IMyGasTank).FilledRatio;
+            }
+            oxygen /= tanks.Count / 100f;
+        }
 
-        var timeLeft = TimeSpan.FromSeconds(Math.Min(oxygen * tanks.Count / 0.0001, 359999)); 
-        panel.WritePublicText(String.Format(FORMAT, oxygen, tanks.Count, Math.Floor(timeLeft.TotalHours), timeLeft.Minutes, timeLeft.Seconds)); 
-        panel.ShowPublicTextOnScreen(); 
+        var timeLeft = TimeSpan.FromSeconds(Math.Min(oxygen * tanks.Count / 0.0001, 359999));
+        panel.WritePublicText(String.Format(FORMAT, oxygen, tanks.Count, Math.Floor(timeLeft.TotalHours), timeLeft.Minutes, timeLeft.Seconds));
+        panel.ShowPublicTextOnScreen();
     }
+    #endregion
 }
