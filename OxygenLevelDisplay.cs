@@ -50,12 +50,12 @@ public class OxygenLevelDisplay
 
         double oxygen = 0;
         var tanks = new List<IMyTerminalBlock>();
-        GridTerminalSystem.GetBlocksOfType<IMyOxygenTank>(tanks);
+        GridTerminalSystem.GetBlocksOfType<IMyGasTank>(tanks);
         if (tanks.Count > 0)
         {
             for (int i = 0; i < tanks.Count; i++)
             {
-                oxygen += (tanks[i] as IMyOxygenTank).GetOxygenLevel();
+                oxygen += (tanks[i] as IMyGasTank).FilledRatio;
             }
             oxygen /= tanks.Count / 100f;
         }
