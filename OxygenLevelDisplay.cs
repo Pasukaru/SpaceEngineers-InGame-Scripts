@@ -63,7 +63,7 @@ public class OxygenLevelDisplay
             tanks = tanks.Where(tank => tank.CubeGrid == Me.CubeGrid).ToList(); 
         } 
      
-        var oxygen = 0f;
+        double oxygen = 0f;
         var capacity = 0f;
         if (tanks.Count > 0) 
         { 
@@ -77,7 +77,7 @@ public class OxygenLevelDisplay
         var percent = oxygen / capacity * 100;
 
         var timeLeft = TimeSpan.FromSeconds(Math.Min(oxygen / O2_CONSUMPTION / ASTRONAUTS, 359999)); 
-        panel.WritePublicText(String.Format(FORMAT, percent, tanks.Count, 
+        panel.WriteText(String.Format(FORMAT, percent, tanks.Count, 
           Math.Floor(timeLeft.TotalHours), timeLeft.Minutes, timeLeft.Seconds, 
           oxygen, capacity)
         );
